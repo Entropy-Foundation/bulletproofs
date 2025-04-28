@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
 #[macro_use]
 extern crate criterion;
+
+use blsttc::Fr;
+use blsttc::group::ff::Field;
 use criterion::Criterion;
 
 use rand;
 use rand::Rng;
-
-use curve25519_dalek::scalar::Scalar;
 
 use merlin::Transcript;
 
@@ -27,7 +28,7 @@ fn create_aggregated_rangeproof_helper(n: usize, c: &mut Criterion) {
 
             let (min, max) = (0u64, ((1u128 << n) - 1) as u64);
             let values: Vec<u64> = (0..m).map(|_| rng.gen_range(min..max)).collect();
-            let blindings: Vec<Scalar> = (0..m).map(|_| Scalar::random(&mut rng)).collect();
+            let blindings: Vec<Fr> = (0..m).map(|_| Fr::random(&mut rng)).collect();
 
             b.iter(|| {
                 // Each proof creation requires a clean transcript.
@@ -75,7 +76,7 @@ fn verify_aggregated_rangeproof_helper(n: usize, c: &mut Criterion) {
 
             let (min, max) = (0u64, ((1u128 << n) - 1) as u64);
             let values: Vec<u64> = (0..m).map(|_| rng.gen_range(min..max)).collect();
-            let blindings: Vec<Scalar> = (0..m).map(|_| Scalar::random(&mut rng)).collect();
+            let blindings: Vec<Fr> = (0..m).map(|_| Fr::random(&mut rng)).collect();
 
             let mut transcript = Transcript::new(b"AggregateRangeProofBenchmark");
             let (proof, value_commitments) = RangeProof::prove_multiple(

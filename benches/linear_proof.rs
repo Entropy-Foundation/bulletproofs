@@ -5,17 +5,15 @@ extern crate criterion;
 use criterion::Criterion;
 
 extern crate bulletproofs;
-extern crate curve25519_dalek;
 extern crate merlin;
 extern crate rand;
 
 use core::iter;
-
+use blsttc::{Fr, G1Projective};
+use blsttc::group::ff::Field;
+use blsttc::group::Group;
 use bulletproofs::LinearProof;
 use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::ristretto::RistrettoPoint;
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::VartimeMultiscalarMul;
 use merlin::Transcript;
 
 /// Different linear proof vector lengths to try
@@ -31,26 +29,32 @@ fn create_linear_proof_helper(c: &mut Criterion) {
             // Calls `.G()` on generators, which should be a pub(crate) function only.
             // For now, make that function public so it can be accessed from benches.
             // We don't want to use bp_gens directly because we don't need the H generators.
-            let G: Vec<RistrettoPoint> = bp_gens.share(0).G(*n).cloned().collect();
+            let G: Vec<G1Projective> = bp_gens.share(0).G(*n).cloned().collect();
 
             let pedersen_gens = PedersenGens::default();
             let F = pedersen_gens.B;
             let B = pedersen_gens.B_blinding;
 
             // a and b are the vectors for which we want to prove c = <a,b>
-            let a: Vec<_> = (0..*n).map(|_| Scalar::random(&mut rng)).collect();
-            let b: Vec<_> = (0..*n).map(|_| Scalar::random(&mut rng)).collect();
+            let a: Vec<_> = (0..*n).map(|_| Fr::random(&mut rng)).collect();
+            let b: Vec<_> = (0..*n).map(|_| Fr::random(&mut rng)).collect();
 
             let mut transcript = Transcript::new(b"LinearProofBenchmark");
 
             // C = <a, G> + r * B + <a, b> * F
-            let r = Scalar::random(&mut rng);
+            let r = Fr::random(&mut rng);
             let c = inner_product(&a, &b);
-            let C = RistrettoPoint::vartime_multiscalar_mul(
-                a.iter().chain(iter::once(&r)).chain(iter::once(&c)),
-                G.iter().chain(iter::once(&B)).chain(iter::once(&F)),
-            )
-            .compress();
+
+            let points: Vec<_> = G.iter().cloned().chain(iter::once(B)).chain(iter::once(F)).collect();
+            let scalars: Vec<_>  = a.iter().cloned().chain(iter::once(r)).chain(iter::once(c)).collect();
+
+            let C: G1Projective;
+            if points.len() == 0 || scalars.len() == 0 {
+                C = G1Projective::identity();
+            }
+            else{
+                C = G1Projective::multi_exp(points.as_slice(),scalars.as_slice());
+            }
 
             // Make linear proof
             bench.iter(|| {
@@ -78,8 +82,8 @@ fn create_linear_proof_helper(c: &mut Criterion) {
 ///    {\langle {\mathbf{a}}, {\mathbf{b}} \rangle} = \sum\_{i=0}^{n-1} a\_i \cdot b\_i.
 /// \\]
 /// Panics if the lengths of \\(\mathbf{a}\\) and \\(\mathbf{b}\\) are not equal.
-fn inner_product(a: &[Scalar], b: &[Scalar]) -> Scalar {
-    let mut out = Scalar::ZERO;
+fn inner_product(a: &[Fr], b: &[Fr]) -> Fr {
+    let mut out = Fr::zero();
     if a.len() != b.len() {
         panic!("inner_product(a,b): lengths of vectors do not match");
     }
@@ -108,29 +112,35 @@ fn linear_verify(c: &mut Criterion) {
             // Calls `.G()` on generators, which should be a pub(crate) function only.
             // For now, make that function public so it can be accessed from benches.
             // We can't simply use bp_gens directly because we don't need the H generators.
-            let G: Vec<RistrettoPoint> = bp_gens.share(0).G(*n).cloned().collect();
+            let G: Vec<G1Projective> = bp_gens.share(0).G(*n).cloned().collect();
             let pedersen_gens = PedersenGens::default();
             let F = pedersen_gens.B;
             let B = pedersen_gens.B_blinding;
 
-            let b: Vec<_> = (0..*n).map(|_| Scalar::random(&mut rng)).collect();
+            let b: Vec<_> = (0..*n).map(|_| Fr::random(&mut rng)).collect();
 
             // Generate the proof in its own scope to prevent reuse of
             // prover variables by the verifier
             let (proof, C) = {
                 // a and b are the vectors for which we want to prove c = <a,b>
-                let a: Vec<_> = (0..*n).map(|_| Scalar::random(&mut rng)).collect();
+                let a: Vec<_> = (0..*n).map(|_| Fr::random(&mut rng)).collect();
 
                 let mut transcript = Transcript::new(b"LinearProofBenchmark");
 
                 // C = <a, G> + r * B + <a, b> * F
-                let r = Scalar::random(&mut rng);
+                let r = Fr::random(&mut rng);
                 let c = inner_product(&a, &b);
-                let C = RistrettoPoint::vartime_multiscalar_mul(
-                    a.iter().chain(iter::once(&r)).chain(iter::once(&c)),
-                    G.iter().chain(iter::once(&B)).chain(iter::once(&F)),
-                )
-                .compress();
+
+                let points: Vec<_> = G.iter().cloned().chain(iter::once(B)).chain(iter::once(F)).collect();
+                let scalars: Vec<_>  = a.iter().cloned().chain(iter::once(r)).chain(iter::once(c)).collect();
+
+                let C: G1Projective;
+                if points.len() == 0 || scalars.len() == 0 {
+                    C = G1Projective::identity();
+                }
+                else{
+                    C = G1Projective::multi_exp(points.as_slice(),scalars.as_slice());
+                }   
 
                 let proof = LinearProof::create(
                     &mut transcript,

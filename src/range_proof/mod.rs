@@ -10,9 +10,9 @@ use self::rand::thread_rng;
 use alloc::vec::Vec;
 
 use core::iter;
-
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
+use blsttc::{Fr, G1Projective};
+use blsttc::group::ff::Field;
+use blsttc::group::{Group};
 use merlin::Transcript;
 
 use crate::errors::ProofError;
@@ -57,19 +57,19 @@ pub mod party;
 #[derive(Clone, Debug)]
 pub struct RangeProof {
     /// Commitment to the bits of the value
-    A: CompressedRistretto,
+    A: G1Projective,
     /// Commitment to the blinding factors
-    S: CompressedRistretto,
+    S: G1Projective,
     /// Commitment to the \\(t_1\\) coefficient of \\( t(x) \\)
-    T_1: CompressedRistretto,
+    T_1: G1Projective,
     /// Commitment to the \\(t_2\\) coefficient of \\( t(x) \\)
-    T_2: CompressedRistretto,
+    T_2: G1Projective,
     /// Evaluation of the polynomial \\(t(x)\\) at the challenge point \\(x\\)
-    t_x: Scalar,
+    t_x: Fr,
     /// Blinding factor for the synthetic commitment to \\(t(x)\\)
-    t_x_blinding: Scalar,
+    t_x_blinding: Fr,
     /// Blinding factor for the synthetic commitment to the inner-product arguments
-    e_blinding: Scalar,
+    e_blinding: Fr,
     /// Proof data for the inner-product argument.
     ipp_proof: InnerProductProof,
 }
@@ -84,9 +84,6 @@ impl RangeProof {
     /// extern crate rand;
     /// use rand::thread_rng;
     ///
-    /// extern crate curve25519_dalek;
-    /// use curve25519_dalek::scalar::Scalar;
-    ///
     /// extern crate merlin;
     /// use merlin::Transcript;
     ///
@@ -96,6 +93,8 @@ impl RangeProof {
     /// # fn main() {
     /// // Generators for Pedersen commitments.  These can be selected
     /// // independently of the Bulletproofs generators.
+    /// use blsttc::Fr;
+    /// use blsttc::group::ff::Field;
     /// let pc_gens = PedersenGens::default();
     ///
     /// // Generators for Bulletproofs, valid for proofs up to bitsize 64
@@ -106,7 +105,7 @@ impl RangeProof {
     /// let secret_value = 1037578891u64;
     ///
     /// // The API takes a blinding factor for the commitment.
-    /// let blinding = Scalar::random(&mut thread_rng());
+    /// let blinding = Fr::random(&mut thread_rng());
     ///
     /// // The proof can be chained to an existing transcript.
     /// // Here we create a transcript with a doctest domain separator.
@@ -136,10 +135,10 @@ impl RangeProof {
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
         v: u64,
-        v_blinding: &Scalar,
+        v_blinding: &Fr,
         n: usize,
         rng: &mut T,
-    ) -> Result<(RangeProof, CompressedRistretto), ProofError> {
+    ) -> Result<(RangeProof, G1Projective), ProofError> {
         let (p, Vs) = RangeProof::prove_multiple_with_rng(
             bp_gens,
             pc_gens,
@@ -162,9 +161,9 @@ impl RangeProof {
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
         v: u64,
-        v_blinding: &Scalar,
+        v_blinding: &Fr,
         n: usize,
-    ) -> Result<(RangeProof, CompressedRistretto), ProofError> {
+    ) -> Result<(RangeProof, G1Projective), ProofError> {
         RangeProof::prove_single_with_rng(
             bp_gens,
             pc_gens,
@@ -183,8 +182,6 @@ impl RangeProof {
     /// extern crate rand;
     /// use rand::thread_rng;
     ///
-    /// extern crate curve25519_dalek;
-    /// use curve25519_dalek::scalar::Scalar;
     ///
     /// extern crate merlin;
     /// use merlin::Transcript;
@@ -195,6 +192,8 @@ impl RangeProof {
     /// # fn main() {
     /// // Generators for Pedersen commitments.  These can be selected
     /// // independently of the Bulletproofs generators.
+    /// use blsttc::Fr;
+    /// use blsttc::group::ff::Field;
     /// let pc_gens = PedersenGens::default();
     ///
     /// // Generators for Bulletproofs, valid for proofs up to bitsize 64
@@ -205,7 +204,7 @@ impl RangeProof {
     /// let secrets = [4242344947u64, 3718732727u64, 2255562556u64, 2526146994u64];
     ///
     /// // The API takes blinding factors for the commitments.
-    /// let blindings: Vec<_> = (0..4).map(|_| Scalar::random(&mut thread_rng())).collect();
+    /// let blindings: Vec<_> = (0..4).map(|_| Fr::random(&mut thread_rng())).collect();
     ///
     /// // The proof can be chained to an existing transcript.
     /// // Here we create a transcript with a doctest domain separator.
@@ -235,10 +234,10 @@ impl RangeProof {
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
         values: &[u64],
-        blindings: &[Scalar],
+        blindings: &[Fr],
         n: usize,
         rng: &mut T,
-    ) -> Result<(RangeProof, Vec<CompressedRistretto>), ProofError> {
+    ) -> Result<(RangeProof, Vec<G1Projective>), ProofError> {
         use self::dealer::*;
         use self::party::*;
 
@@ -295,9 +294,9 @@ impl RangeProof {
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
         values: &[u64],
-        blindings: &[Scalar],
+        blindings: &[Fr],
         n: usize,
-    ) -> Result<(RangeProof, Vec<CompressedRistretto>), ProofError> {
+    ) -> Result<(RangeProof, Vec<G1Projective>), ProofError> {
         RangeProof::prove_multiple_with_rng(
             bp_gens,
             pc_gens,
@@ -317,7 +316,7 @@ impl RangeProof {
         bp_gens: &BulletproofGens,
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
-        V: &CompressedRistretto,
+        V: &G1Projective,
         n: usize,
         rng: &mut T,
     ) -> Result<(), ProofError> {
@@ -334,7 +333,7 @@ impl RangeProof {
         bp_gens: &BulletproofGens,
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
-        V: &CompressedRistretto,
+        V: &G1Projective,
         n: usize,
     ) -> Result<(), ProofError> {
         self.verify_single_with_rng(bp_gens, pc_gens, transcript, V, n, &mut thread_rng())
@@ -346,7 +345,7 @@ impl RangeProof {
         bp_gens: &BulletproofGens,
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
-        value_commitments: &[CompressedRistretto],
+        value_commitments: &[G1Projective],
         n: usize,
         rng: &mut T,
     ) -> Result<(), ProofError> {
@@ -392,7 +391,7 @@ impl RangeProof {
         let w = transcript.challenge_scalar(b"w");
 
         // Challenge value for batching statements to be verified
-        let c = Scalar::random(rng);
+        let c = Fr::random(rng);
 
         let (x_sq, x_inv_sq, s) = self.ipp_proof.verification_scalars(n * m, transcript)?;
         let s_inv = s.iter().rev();
@@ -402,49 +401,53 @@ impl RangeProof {
 
         // Construct concat_z_and_2, an iterator of the values of
         // z^0 * \vec(2)^n || z^1 * \vec(2)^n || ... || z^(m-1) * \vec(2)^n
-        let powers_of_2: Vec<Scalar> = util::exp_iter(Scalar::from(2u64)).take(n).collect();
-        let concat_z_and_2: Vec<Scalar> = util::exp_iter(z)
+        let powers_of_2: Vec<Fr> = util::exp_iter(Fr::from(2u64)).take(n).collect();
+        let concat_z_and_2: Vec<Fr> = util::exp_iter(z)
             .take(m)
             .flat_map(|exp_z| powers_of_2.iter().map(move |exp_2| exp_2 * exp_z))
             .collect();
 
         let g = s.iter().map(|s_i| minus_z - a * s_i);
         let h = s_inv
-            .zip(util::exp_iter(y.invert()))
+            .zip(util::exp_iter(y.invert().unwrap()))
             .zip(concat_z_and_2.iter())
             .map(|((s_i_inv, exp_y_inv), z_and_2)| z + exp_y_inv * (zz * z_and_2 - b * s_i_inv));
 
         let value_commitment_scalars = util::exp_iter(z).take(m).map(|z_exp| c * zz * z_exp);
         let basepoint_scalar = w * (self.t_x - a * b) + c * (delta(n, m, &y, &z) - self.t_x);
 
-        use curve25519_dalek::traits::VartimeMultiscalarMul;
-        let mega_check = RistrettoPoint::optional_multiscalar_mul(
-            iter::once(Scalar::ONE)
-                .chain(iter::once(x))
-                .chain(iter::once(c * x))
-                .chain(iter::once(c * x * x))
-                .chain(x_sq.iter().cloned())
-                .chain(x_inv_sq.iter().cloned())
-                .chain(iter::once(-self.e_blinding - c * self.t_x_blinding))
-                .chain(iter::once(basepoint_scalar))
-                .chain(g)
-                .chain(h)
-                .chain(value_commitment_scalars),
-            iter::once(self.A.decompress())
-                .chain(iter::once(self.S.decompress()))
-                .chain(iter::once(self.T_1.decompress()))
-                .chain(iter::once(self.T_2.decompress()))
-                .chain(self.ipp_proof.L_vec.iter().map(|L| L.decompress()))
-                .chain(self.ipp_proof.R_vec.iter().map(|R| R.decompress()))
-                .chain(iter::once(Some(pc_gens.B_blinding)))
-                .chain(iter::once(Some(pc_gens.B)))
-                .chain(bp_gens.G(n, m).map(|&x| Some(x)))
-                .chain(bp_gens.H(n, m).map(|&x| Some(x)))
-                .chain(value_commitments.iter().map(|V| V.decompress())),
-        )
-        .ok_or_else(|| ProofError::VerificationError)?;
+        let points: Vec<_> = iter::once(self.A)
+            .chain(iter::once(self.S))
+            .chain(iter::once(self.T_1))
+            .chain(iter::once(self.T_2))
+            .chain(self.ipp_proof.L_vec.iter().map(|L| L.clone()))
+            .chain(self.ipp_proof.R_vec.iter().map(|R| R.clone()))
+            .chain(iter::once(pc_gens.B_blinding))
+            .chain(iter::once(pc_gens.B))
+            .chain(bp_gens.G(n, m).map(|&x| x.clone()))
+            .chain(bp_gens.H(n, m).map(|&x| x.clone()))
+            .chain(value_commitments.iter().map(|V| V.clone())).collect();
+        
+        let scalars: Vec<_> = iter::once(Fr::one())
+            .chain(iter::once(x))
+            .chain(iter::once(c * x))
+            .chain(iter::once(c * x * x))
+            .chain(x_sq.iter().cloned())
+            .chain(x_inv_sq.iter().cloned())
+            .chain(iter::once(-self.e_blinding - c * self.t_x_blinding))
+            .chain(iter::once(basepoint_scalar))
+            .chain(g)
+            .chain(h)
+            .chain(value_commitment_scalars).collect();
 
-        use group::Group;
+        let mega_check: G1Projective;
+        if points.len() == 0 || scalars.len() == 0 {
+            mega_check = G1Projective::identity();
+        }
+        else{
+            mega_check = G1Projective::multi_exp(points.as_slice(),scalars.as_slice());
+        }
+
         if mega_check.is_identity().into() {
             Ok(())
         } else {
@@ -461,7 +464,7 @@ impl RangeProof {
         bp_gens: &BulletproofGens,
         pc_gens: &PedersenGens,
         transcript: &mut Transcript,
-        value_commitments: &[CompressedRistretto],
+        value_commitments: &[G1Projective],
         n: usize,
     ) -> Result<(), ProofError> {
         self.verify_multiple_with_rng(
@@ -481,20 +484,20 @@ impl RangeProof {
     ///
     /// The layout of the range proof encoding is:
     ///
-    /// * four compressed Ristretto points \\(A,S,T_1,T_2\\),
+    /// * four compressed Bls points \\(A,S,T_1,T_2\\),
     /// * three scalars \\(t_x, \tilde{t}_x, \tilde{e}\\),
-    /// * \\(n\\) pairs of compressed Ristretto points \\(L_0,R_0\dots,L_{n-1},R_{n-1}\\),
+    /// * \\(n\\) pairs of compressed Bls points \\(L_0,R_0\dots,L_{n-1},R_{n-1}\\),
     /// * two scalars \\(a, b\\).
     pub fn to_bytes(&self) -> Vec<u8> {
         // 7 elements: points A, S, T1, T2, scalars tx, tx_bl, e_bl.
-        let mut buf = Vec::with_capacity(7 * 32 + self.ipp_proof.serialized_size());
-        buf.extend_from_slice(self.A.as_bytes());
-        buf.extend_from_slice(self.S.as_bytes());
-        buf.extend_from_slice(self.T_1.as_bytes());
-        buf.extend_from_slice(self.T_2.as_bytes());
-        buf.extend_from_slice(self.t_x.as_bytes());
-        buf.extend_from_slice(self.t_x_blinding.as_bytes());
-        buf.extend_from_slice(self.e_blinding.as_bytes());
+        let mut buf = Vec::with_capacity(4 * 48 + 3 * 32 + self.ipp_proof.serialized_size());
+        buf.extend_from_slice(self.A.to_compressed().as_slice());
+        buf.extend_from_slice(self.S.to_compressed().as_slice());
+        buf.extend_from_slice(self.T_1.to_compressed().as_slice());
+        buf.extend_from_slice(self.T_2.to_compressed().as_slice());
+        buf.extend_from_slice(self.t_x.to_bytes_le().as_ref());
+        buf.extend_from_slice(self.t_x_blinding.to_bytes_le().as_ref());
+        buf.extend_from_slice(self.e_blinding.to_bytes_le().as_ref());
         buf.extend(self.ipp_proof.to_bytes_iter());
         buf
     }
@@ -503,28 +506,32 @@ impl RangeProof {
     ///
     /// Returns an error if the byte slice cannot be parsed into a `RangeProof`.
     pub fn from_bytes(slice: &[u8]) -> Result<RangeProof, ProofError> {
-        if slice.len() % 32 != 0 {
-            return Err(ProofError::FormatError);
-        }
-        if slice.len() < 7 * 32 {
+        
+        if slice.len() < 4 * 48 + 3 * 32 {
             return Err(ProofError::FormatError);
         }
 
         use crate::util::read32;
+        use crate::util::read48;
 
-        let A = CompressedRistretto(read32(&slice[0 * 32..]));
-        let S = CompressedRistretto(read32(&slice[1 * 32..]));
-        let T_1 = CompressedRistretto(read32(&slice[2 * 32..]));
-        let T_2 = CompressedRistretto(read32(&slice[3 * 32..]));
+        let A = G1Projective::from_compressed(&read48(&slice[0 * 48..]))
+            .into_option().ok_or_else(|| ProofError::FormatError)?;
+        
+        let S = G1Projective::from_compressed(&read48(&slice[1 * 48..]))
+            .into_option().ok_or_else(|| ProofError::FormatError)?;
+        let T_1 = G1Projective::from_compressed(&read48(&slice[2 * 48..]))
+            .into_option().ok_or_else(|| ProofError::FormatError)?;
+        let T_2 = G1Projective::from_compressed(&read48(&slice[3 * 48..]))
+            .into_option().ok_or_else(|| ProofError::FormatError)?;
 
-        let t_x = Option::from(Scalar::from_canonical_bytes(read32(&slice[4 * 32..])))
+        let t_x = Option::from(Fr::from_bytes_le(&read32(&slice[4 * 48..])))
             .ok_or(ProofError::FormatError)?;
-        let t_x_blinding = Option::from(Scalar::from_canonical_bytes(read32(&slice[5 * 32..])))
+        let t_x_blinding = Option::from(Fr::from_bytes_le(&read32(&slice[4 * 48 + 32..])))
             .ok_or(ProofError::FormatError)?;
-        let e_blinding = Option::from(Scalar::from_canonical_bytes(read32(&slice[6 * 32..])))
+        let e_blinding = Option::from(Fr::from_bytes_le(&read32(&slice[4 * 48 + 2 * 32..])))
             .ok_or(ProofError::FormatError)?;
 
-        let ipp_proof = InnerProductProof::from_bytes(&slice[7 * 32..])?;
+        let ipp_proof = InnerProductProof::from_bytes(&slice[4 * 48 + 3 * 32..])?;
 
         Ok(RangeProof {
             A,
@@ -585,9 +592,9 @@ impl<'de> Deserialize<'de> for RangeProof {
 /// \\[
 /// \delta(y,z) = (z - z^{2}) \langle \mathbf{1}, {\mathbf{y}}^{n \cdot m} \rangle - \sum_{j=0}^{m-1} z^{j+3} \cdot \langle \mathbf{1}, {\mathbf{2}}^{n \cdot m} \rangle
 /// \\]
-fn delta(n: usize, m: usize, y: &Scalar, z: &Scalar) -> Scalar {
+fn delta(n: usize, m: usize, y: &Fr, z: &Fr) -> Fr {
     let sum_y = util::sum_of_powers(y, n * m);
-    let sum_2 = util::sum_of_powers(&Scalar::from(2u64), n);
+    let sum_2 = util::sum_of_powers(&Fr::from(2u64), n);
     let sum_z = util::sum_of_powers(z, m);
 
     (z - z * z) * sum_y - z * z * z * sum_2 * sum_z
@@ -602,8 +609,8 @@ mod tests {
     #[test]
     fn test_delta() {
         let mut rng = rand::thread_rng();
-        let y = Scalar::random(&mut rng);
-        let z = Scalar::random(&mut rng);
+        let y = Fr::random(&mut rng);
+        let z = Fr::random(&mut rng);
 
         // Choose n = 256 to ensure we overflow the group order during
         // the computation, to check that that's done correctly
@@ -612,9 +619,9 @@ mod tests {
         // code copied from previous implementation
         let z2 = z * z;
         let z3 = z2 * z;
-        let mut power_g = Scalar::ZERO;
-        let mut exp_y = Scalar::ONE; // start at y^0 = 1
-        let mut exp_2 = Scalar::ONE; // start at 2^0 = 1
+        let mut power_g = Fr::zero();
+        let mut exp_y = Fr::one(); // start at y^0 = 1
+        let mut exp_2 = Fr::one(); // start at 2^0 = 1
         for _ in 0..n {
             power_g += (z - z2) * exp_y - z3 * exp_2;
 
@@ -652,7 +659,7 @@ mod tests {
             // 0. Create witness data
             let (min, max) = (0u64, ((1u128 << n) - 1) as u64);
             let values: Vec<u64> = (0..m).map(|_| rng.gen_range(min..max)).collect();
-            let blindings: Vec<Scalar> = (0..m).map(|_| Scalar::random(&mut rng)).collect();
+            let blindings: Vec<Fr> = (0..m).map(|_| Fr::random(&mut rng)).collect();
 
             // 1. Create the proof
             let mut transcript = Transcript::new(b"AggregatedRangeProofTest");
@@ -744,20 +751,20 @@ mod tests {
 
         // Parties 0, 2 are honest and use a 32-bit value
         let v0 = rng.gen::<u32>() as u64;
-        let v0_blinding = Scalar::random(&mut rng);
+        let v0_blinding = Fr::random(&mut rng);
         let party0 = Party::new(&bp_gens, &pc_gens, v0, v0_blinding, n).unwrap();
 
         let v2 = rng.gen::<u32>() as u64;
-        let v2_blinding = Scalar::random(&mut rng);
+        let v2_blinding = Fr::random(&mut rng);
         let party2 = Party::new(&bp_gens, &pc_gens, v2, v2_blinding, n).unwrap();
 
         // Parties 1, 3 are dishonest and use a 64-bit value
         let v1 = rng.gen::<u64>();
-        let v1_blinding = Scalar::random(&mut rng);
+        let v1_blinding = Fr::random(&mut rng);
         let party1 = Party::new(&bp_gens, &pc_gens, v1, v1_blinding, n).unwrap();
 
         let v3 = rng.gen::<u64>();
-        let v3_blinding = Scalar::random(&mut rng);
+        let v3_blinding = Fr::random(&mut rng);
         let party3 = Party::new(&bp_gens, &pc_gens, v3, v3_blinding, n).unwrap();
 
         let dealer = Dealer::new(&bp_gens, &pc_gens, &mut transcript, n, m).unwrap();
@@ -816,7 +823,7 @@ mod tests {
         let mut transcript = Transcript::new(b"AggregatedRangeProofTest");
 
         let v0 = rng.gen::<u32>() as u64;
-        let v0_blinding = Scalar::random(&mut rng);
+        let v0_blinding = Fr::random(&mut rng);
         let party0 = Party::new(&bp_gens, &pc_gens, v0, v0_blinding, n).unwrap();
 
         let dealer = Dealer::new(&bp_gens, &pc_gens, &mut transcript, n, m).unwrap();
@@ -833,7 +840,7 @@ mod tests {
             dealer.receive_poly_commitments(vec![poly_com0]).unwrap();
 
         // But now simulate a malicious dealer choosing x = 0
-        poly_challenge.x = Scalar::ZERO;
+        poly_challenge.x = Fr::zero();
 
         let maybe_share0 = party0.apply_challenge(&poly_challenge);
 

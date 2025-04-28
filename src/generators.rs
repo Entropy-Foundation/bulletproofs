@@ -7,12 +7,9 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::RistrettoPoint;
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::MultiscalarMul;
-use digest::{ExtendableOutput, Update, XofReader};
+use blsttc::{Fr, G1Projective};
+use blsttc::group::{Group, GroupEncoding};
+use digest::{Digest, ExtendableOutput, Update, XofReader};
 use sha3::{Sha3_512, Shake256, Shake256Reader};
 
 /// Represents a pair of base points for Pedersen commitments.
@@ -23,31 +20,32 @@ use sha3::{Sha3_512, Shake256, Shake256Reader};
 ///
 /// The default generators are:
 ///
-/// * `B`: the `ristretto255` basepoint;
-/// * `B_blinding`: the result of `ristretto255` SHA3-512
+/// * `B`: the `bls12381` basepoint;
+/// * `B_blinding`: the result of `bls12381` SHA3-512
 /// hash-to-group on input `B_bytes`.
 #[derive(Copy, Clone)]
 pub struct PedersenGens {
     /// Base for the committed value
-    pub B: RistrettoPoint,
+    pub B: G1Projective,
     /// Base for the blinding factor
-    pub B_blinding: RistrettoPoint,
+    pub B_blinding: G1Projective,
 }
 
 impl PedersenGens {
     /// Creates a Pedersen commitment using the value scalar and a blinding factor.
-    pub fn commit(&self, value: Scalar, blinding: Scalar) -> RistrettoPoint {
-        RistrettoPoint::multiscalar_mul(&[value, blinding], &[self.B, self.B_blinding])
+    pub fn commit(&self, value: Fr, blinding: Fr) -> G1Projective {
+        G1Projective::multi_exp(&[self.B, self.B_blinding],&[value, blinding] )
     }
 }
 
 impl Default for PedersenGens {
     fn default() -> Self {
+        let mut hasher = Sha3_512::new();
+        digest::Update::update(&mut hasher, G1Projective::generator().to_bytes().as_ref());
+        let digest = hasher.finalize();
         PedersenGens {
-            B: RISTRETTO_BASEPOINT_POINT,
-            B_blinding: RistrettoPoint::hash_from_bytes::<Sha3_512>(
-                RISTRETTO_BASEPOINT_COMPRESSED.as_bytes(),
-            ),
+            B: G1Projective::generator(),
+            B_blinding: G1Projective::hash_to_curve(digest.as_ref(), b"PedersenCommitment_B_Linding_BLS12-381_G1", &[]),
         }
     }
 }
@@ -89,13 +87,12 @@ impl Default for GeneratorsChain {
 }
 
 impl Iterator for GeneratorsChain {
-    type Item = RistrettoPoint;
+    type Item = G1Projective;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut uniform_bytes = [0u8; 64];
         self.reader.read(&mut uniform_bytes);
-
-        Some(RistrettoPoint::from_uniform_bytes(&uniform_bytes))
+        Some(G1Projective::hash_to_curve(&uniform_bytes, b"GeneratorsChain_BLS12-381_G1", &[]))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -114,7 +111,7 @@ impl Iterator for GeneratorsChain {
 ///
 /// To construct an arbitrary-length chain of generators, we apply
 /// SHAKE256 to a domain separator label, and feed each 64 bytes of
-/// XOF output into the `ristretto255` hash-to-group function.
+/// XOF output into the `bls12381` hash-to-group function.
 /// Each of the `m` parties' generators are constructed using a
 /// different domain separation label, and proving and verification
 /// uses the first `n` elements of the arbitrary-length chain.
@@ -136,9 +133,9 @@ pub struct BulletproofGens {
     /// Number of values or parties
     pub party_capacity: usize,
     /// Precomputed \\(\mathbf G\\) generators for each party.
-    G_vec: Vec<Vec<RistrettoPoint>>,
+    G_vec: Vec<Vec<G1Projective>>,
     /// Precomputed \\(\mathbf H\\) generators for each party.
-    H_vec: Vec<Vec<RistrettoPoint>>,
+    H_vec: Vec<Vec<G1Projective>>,
 }
 
 impl BulletproofGens {
@@ -204,7 +201,7 @@ impl BulletproofGens {
     }
 
     /// Return an iterator over the aggregation of the parties' G generators with given size `n`.
-    pub(crate) fn G(&self, n: usize, m: usize) -> impl Iterator<Item = &RistrettoPoint> {
+    pub(crate) fn G(&self, n: usize, m: usize) -> impl Iterator<Item = &G1Projective> {
         AggregatedGensIter {
             n,
             m,
@@ -215,7 +212,7 @@ impl BulletproofGens {
     }
 
     /// Return an iterator over the aggregation of the parties' H generators with given size `n`.
-    pub(crate) fn H(&self, n: usize, m: usize) -> impl Iterator<Item = &RistrettoPoint> {
+    pub(crate) fn H(&self, n: usize, m: usize) -> impl Iterator<Item = &G1Projective> {
         AggregatedGensIter {
             n,
             m,
@@ -227,7 +224,7 @@ impl BulletproofGens {
 }
 
 struct AggregatedGensIter<'a> {
-    array: &'a Vec<Vec<RistrettoPoint>>,
+    array: &'a Vec<Vec<G1Projective>>,
     n: usize,
     m: usize,
     party_idx: usize,
@@ -235,7 +232,7 @@ struct AggregatedGensIter<'a> {
 }
 
 impl<'a> Iterator for AggregatedGensIter<'a> {
-    type Item = &'a RistrettoPoint;
+    type Item = &'a G1Projective;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.gen_idx >= self.n {
@@ -276,12 +273,12 @@ pub struct BulletproofGensShare<'a> {
 
 impl<'a> BulletproofGensShare<'a> {
     /// Return an iterator over this party's G generators with given size `n`.
-    pub fn G(&self, n: usize) -> impl Iterator<Item = &'a RistrettoPoint> {
+    pub fn G(&self, n: usize) -> impl Iterator<Item = &'a G1Projective> {
         self.gens.G_vec[self.share].iter().take(n)
     }
 
     /// Return an iterator over this party's H generators with given size `n`.
-    pub(crate) fn H(&self, n: usize) -> impl Iterator<Item = &'a RistrettoPoint> {
+    pub(crate) fn H(&self, n: usize) -> impl Iterator<Item = &'a G1Projective> {
         self.gens.H_vec[self.share].iter().take(n)
     }
 }
@@ -295,8 +292,8 @@ mod tests {
         let gens = BulletproofGens::new(64, 8);
 
         let helper = |n: usize, m: usize| {
-            let agg_G: Vec<RistrettoPoint> = gens.G(n, m).cloned().collect();
-            let flat_G: Vec<RistrettoPoint> = gens
+            let agg_G: Vec<G1Projective> = gens.G(n, m).cloned().collect();
+            let flat_G: Vec<G1Projective> = gens
                 .G_vec
                 .iter()
                 .take(m)
@@ -304,8 +301,8 @@ mod tests {
                 .cloned()
                 .collect();
 
-            let agg_H: Vec<RistrettoPoint> = gens.H(n, m).cloned().collect();
-            let flat_H: Vec<RistrettoPoint> = gens
+            let agg_H: Vec<G1Projective> = gens.H(n, m).cloned().collect();
+            let flat_H: Vec<G1Projective> = gens
                 .H_vec
                 .iter()
                 .take(m)
@@ -339,11 +336,11 @@ mod tests {
         gen_resized.increase_capacity(64);
 
         let helper = |n: usize, m: usize| {
-            let gens_G: Vec<RistrettoPoint> = gens.G(n, m).cloned().collect();
-            let gens_H: Vec<RistrettoPoint> = gens.H(n, m).cloned().collect();
+            let gens_G: Vec<G1Projective> = gens.G(n, m).cloned().collect();
+            let gens_H: Vec<G1Projective> = gens.H(n, m).cloned().collect();
 
-            let resized_G: Vec<RistrettoPoint> = gen_resized.G(n, m).cloned().collect();
-            let resized_H: Vec<RistrettoPoint> = gen_resized.H(n, m).cloned().collect();
+            let resized_G: Vec<G1Projective> = gen_resized.G(n, m).cloned().collect();
+            let resized_H: Vec<G1Projective> = gen_resized.H(n, m).cloned().collect();
 
             assert_eq!(gens_G, resized_G);
             assert_eq!(gens_H, resized_H);

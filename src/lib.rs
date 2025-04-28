@@ -11,6 +11,7 @@ extern crate alloc;
 
 #[macro_use]
 extern crate serde_derive;
+extern crate core;
 
 mod util;
 
@@ -20,8 +21,6 @@ mod notes {
     mod inner_product_proof {}
     #[cfg_attr(feature = "docs", doc(include = "../docs/notes-rp.md"))]
     mod range_proof {}
-    #[cfg_attr(feature = "docs", doc(include = "../docs/notes-r1cs.md"))]
-    mod r1cs_proof {}
 }
 
 mod errors;
@@ -43,7 +42,3 @@ pub mod range_proof_mpc {
     pub use crate::range_proof::messages;
     pub use crate::range_proof::party;
 }
-
-#[cfg(feature = "yoloproofs")]
-#[cfg(feature = "std")]
-pub mod r1cs;
