@@ -14,7 +14,7 @@ use rand_core::{CryptoRng, RngCore};
 use crate::errors::ProofError;
 use crate::inner_product_proof::inner_product;
 use crate::transcript::TranscriptProtocol;
-use crate::util::read48;
+use crate::util::{ct_option_to_result, read48};
 
 /// A linear proof, which is an "lightweight" version of a Bulletproofs inner-product proof
 /// Protocol: Section E.3 of [GHL'21](https://eprint.iacr.org/2021/1397.pdf)
@@ -411,16 +411,30 @@ impl LinearProof {
         let mut R_vec: Vec<G1Projective> = Vec::with_capacity(lg_n);
         for i in 0..lg_n {
             let pos = 2 * i * 48;
-            L_vec.push(G1Projective::from_compressed(&read48(&slice[pos..])).into_option().ok_or_else(|| ProofError::FormatError)?);
-            R_vec.push(G1Projective::from_compressed(&read48(&slice[pos + 48 ..])).into_option().ok_or_else(|| ProofError::FormatError)?);
+            L_vec.push(
+                ct_option_to_result(
+                    G1Projective::from_compressed(&read48(&slice[pos..])),
+                    ProofError::FormatError
+                )?);
+            R_vec.push(ct_option_to_result(
+                G1Projective::from_compressed(&read48(&slice[pos + 48..])),
+                ProofError::FormatError
+            )?);
         }
 
         let pos = 2 * lg_n * 48;
-        let S = G1Projective::from_compressed(&read48(&slice[pos..])).into_option().ok_or_else(|| ProofError::FormatError)?;
-        let a = Fr::from_bytes_le(&read32(&slice[pos + 48..])).into_option()
-            .ok_or(ProofError::FormatError)?;
-        let r = Fr::from_bytes_le(&read32(&slice[pos + 80..])).into_option()
-            .ok_or(ProofError::FormatError)?;
+        let S = ct_option_to_result(
+            G1Projective::from_compressed(&read48(&slice[pos..])),
+            ProofError::FormatError
+        )?;
+        let a = ct_option_to_result(
+            Fr::from_bytes_le(&read32(&slice[pos + 48..])),
+            ProofError::FormatError
+        )?;
+        let r = ct_option_to_result(
+            Fr::from_bytes_le(&read32(&slice[pos + 80..])),
+            ProofError::FormatError
+        )?;
 
         Ok(LinearProof {
             L_vec,

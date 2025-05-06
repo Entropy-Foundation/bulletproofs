@@ -8,8 +8,9 @@ use alloc::vec::Vec;
 use blsttc::Fr;
 use blsttc::group::ff::Field;
 use clear_on_drop::clear::Clear;
-
+use subtle::CtOption;
 use crate::inner_product_proof::inner_product;
+use crate::ProofError;
 
 /// Represents a degree-1 vector polynomial \\(\mathbf{a} + \mathbf{b} \cdot x\\).
 pub struct VecPoly1(pub Vec<Fr>, pub Vec<Fr>);
@@ -168,6 +169,14 @@ pub fn read48(data: &[u8]) -> [u8; 48] {
     let mut buf48 = [0u8; 48];
     buf48[..].copy_from_slice(&data[..48]);
     buf48
+}
+
+pub fn ct_option_to_result<T>(ct_option: CtOption<T>, err: ProofError) -> Result<T, ProofError> {
+    if ct_option.is_some().unwrap_u8() == 1 {
+        Ok(ct_option.unwrap())
+    } else {
+        Err(err)
+    }
 }
 
 #[cfg(test)]

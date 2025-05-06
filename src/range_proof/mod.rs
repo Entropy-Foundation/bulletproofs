@@ -24,7 +24,7 @@ use crate::util;
 use rand_core::{CryptoRng, RngCore};
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
-
+use crate::util::ct_option_to_result;
 // Modules for MPC protocol
 
 pub mod dealer;
@@ -514,15 +514,23 @@ impl RangeProof {
         use crate::util::read32;
         use crate::util::read48;
 
-        let A = G1Projective::from_compressed(&read48(&slice[0 * 48..]))
-            .into_option().ok_or_else(|| ProofError::FormatError)?;
+        let A = ct_option_to_result(
+            G1Projective::from_compressed(&read48(&slice[0 * 48..])),
+            ProofError::FormatError
+        )?;
         
-        let S = G1Projective::from_compressed(&read48(&slice[1 * 48..]))
-            .into_option().ok_or_else(|| ProofError::FormatError)?;
-        let T_1 = G1Projective::from_compressed(&read48(&slice[2 * 48..]))
-            .into_option().ok_or_else(|| ProofError::FormatError)?;
-        let T_2 = G1Projective::from_compressed(&read48(&slice[3 * 48..]))
-            .into_option().ok_or_else(|| ProofError::FormatError)?;
+        let S = ct_option_to_result(
+            G1Projective::from_compressed(&read48(&slice[1 * 48..])),
+            ProofError::FormatError
+        )?;
+        let T_1 = ct_option_to_result(
+            G1Projective::from_compressed(&read48(&slice[2 * 48..])),
+            ProofError::FormatError
+        )?;
+        let T_2 = ct_option_to_result(
+            G1Projective::from_compressed(&read48(&slice[3 * 48..])),
+            ProofError::FormatError
+        )?;
 
         let t_x = Option::from(Fr::from_bytes_le(&read32(&slice[4 * 48..])))
             .ok_or(ProofError::FormatError)?;

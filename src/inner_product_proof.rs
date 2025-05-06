@@ -14,7 +14,7 @@ use merlin::Transcript;
 
 use crate::errors::ProofError;
 use crate::transcript::TranscriptProtocol;
-use crate::util::read48;
+use crate::util::{ct_option_to_result, read48};
 
 #[derive(Clone, Debug)]
 pub struct InnerProductProof {
@@ -414,15 +414,26 @@ impl InnerProductProof {
         let mut R_vec: Vec<G1Projective> = Vec::with_capacity(lg_n);
         for i in 0..lg_n {
             let pos = 2 * i * 48;
-            L_vec.push(G1Projective::from_compressed(&read48(&slice[pos..])).into_option().ok_or_else(|| ProofError::FormatError)?);
-            R_vec.push(G1Projective::from_compressed(&read48(&slice[pos + 48 ..])).into_option().ok_or_else(|| ProofError::FormatError)?);
+            L_vec.push(
+                ct_option_to_result(
+                    G1Projective::from_compressed(&read48(&slice[pos..])),
+                    ProofError::FormatError
+                )?);
+            R_vec.push(ct_option_to_result(
+                G1Projective::from_compressed(&read48(&slice[pos + 48..])),
+                ProofError::FormatError
+            )?);
         }
 
         let pos = 2 * lg_n * 48;
-        let a = Fr::from_bytes_le(&read32(&slice[pos..])).into_option()
-            .ok_or(ProofError::FormatError)?;
-        let b = Fr::from_bytes_le(&read32(&slice[pos + 32..])).into_option()
-            .ok_or(ProofError::FormatError)?;
+        let a = ct_option_to_result(
+            Fr::from_bytes_le(&read32(&slice[pos..])),
+            ProofError::FormatError
+        )?;
+        let b = ct_option_to_result(
+            Fr::from_bytes_le(&read32(&slice[pos + 32..])),
+            ProofError::FormatError
+        )?;
 
         Ok(InnerProductProof { L_vec, R_vec, a, b })
     }
